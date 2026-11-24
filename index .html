@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#1b4332">
+<title>The Forest of Reasons</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+:root{--g:#1b4332;--gd:#081c15;--pink:#ff8fab;--lp:#ffc2d1;--red:#e63946}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--gd);overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+body{display:flex;align-items:center;justify-content:center;font-family:'VT323',monospace;color:#fff}
+#game{position:relative}
+canvas{display:block;image-rendering:crisp-edges;image-rendering:pixelated}
+#vig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(8,28,21,.75) 100%)}
+#hud{position:absolute;top:8px;left:10px;font-size:clamp(18px,3vw,26px);letter-spacing:2px;text-shadow:2px 2px 0 #081c15}
+#mute{position:absolute;top:6px;right:8px;background:none;border:3px solid var(--pink);color:var(--lp);font:inherit;font-size:22px;width:36px;height:34px;cursor:pointer}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px;text-align:center;background:rgba(8,28,21,.9)}
+h1{font:clamp(16px,4.6vw,30px)/1.5 'Press Start 2P',monospace;color:var(--pink);text-shadow:3px 3px 0 var(--red)}
+.screen p{font-size:clamp(20px,3.6vw,28px);color:var(--lp);line-height:1.15;max-width:34em}
+.small{opacity:.75}
+.btn{font:12px 'Press Start 2P',monospace;background:var(--red);color:#fff;border:3px solid var(--lp);padding:13px 20px;cursor:pointer;box-shadow:0 5px 0 #9d0208}
+.btn:active{transform:translateY(4px);box-shadow:0 1px 0 #9d0208}
+.btn:focus-visible,#mute:focus-visible{outline:3px solid #ffd166;outline-offset:3px}
+#rs{font-size:20px;color:var(--lp);opacity:.7;cursor:pointer;text-decoration:underline}
+#dlg{display:none;position:absolute;left:5%;right:5%;bottom:5%;background:rgba(8,28,21,.96);border:4px solid var(--pink);box-shadow:0 0 0 4px var(--red),0 8px 0 4px rgba(0,0,0,.4);padding:14px 18px;cursor:pointer}
+#dt{font:11px 'Press Start 2P',monospace;color:var(--red);margin-bottom:6px}
+#ds{font-size:clamp(18px,3vw,24px);color:var(--lp);opacity:.8}
+#dx{font-size:clamp(24px,4.4vw,36px);line-height:1.1;margin:4px 0 8px}
+#dh{font-size:clamp(16px,2.6vw,20px);color:var(--pink);animation:bl 1.2s steps(2) infinite}
+@keyframes bl{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){#dh{animation:none}}
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="c"></canvas>
+  <div id="vig"></div>
+  <div id="hud"></div>
+  <button id="mute" aria-label="Toggle sound">♪</button>
+  <div id="dlg"><div id="dt"></div><div id="ds"></div><div id="dx"></div><div id="dh"></div></div>
+  <div class="screen" id="title">
+    <h1>The Forest<br>of Reasons</h1>
+    <p id="to"></p>
+    <p>A princess walks into the forest. Eight reasons are hidden between the trees. Can you find them all?</p>
+    <button class="btn" id="go">START</button>
+    <p class="small">Arrow keys or WASD, or tap where you want to walk</p>
+    <a id="rs" role="button" tabindex="0">start over</a>
+  </div>
+  <div class="screen" id="end" style="display:none">
+    <h1>You found them all</h1>
+    <p id="fin"></p>
+    <button class="btn" id="again">WALK AGAIN</button>
+  </div>
+</div>
+<script>
+/* ===== EDIT THESE ===== */
+const HER="My Princess", FROM="Ilyas";
+const REASONS=[
+ ["a glowing heart","You are so caring."],
+ ["a lightbulb","You are so smart, and you always know exactly what you’re talking about."],
+ ["a chef’s hat","You are the best chef on this earth."],
+ ["a kiss","You are the sexiest."],
+ ["a magic mirror","You are the prettiest."],
+ ["a cosy cottage","You have great emotional intelligence. You’re the place I go whenever I need anything emotional."],
+ ["a shimmering bubble","You let me be myself. You create this bubble where I can be free and goofy, with zero judgement."],
+ ["a laughing face","You have a great sense of humour."]
+];
+/* ===== SPRITES (1 letter = 1 colour) ===== */
+const PAL={c:'#ffd166',h:'#4a2c1a',s:'#f3c9a5',e:'#2b1810',r:'#e63946',R:'#9d0208',d:'#ff8fab',D:'#d6336c',w:'#fff',p:'#ff8fab',P:'#ffc2d1',y:'#ffd166',b:'#7a5230',k:'#3d2314',u:'#a9def9',a:'#adb5bd'};
+const mk=m=>{const c=document.createElement('canvas');c.width=m[0].length;c.height=m.length;const g=c.getContext('2d');m.forEach((r,y)=>[...r].forEach((ch,x)=>{if(ch!=='.'){g.fillStyle=PAL[ch];g.fillRect(x,y,1,1)}}));return c};
+const BODY=["...c.cc.c...","...cccccc...","..hhhhhhhh..",".hhsssssshh.",".hhsesseshh.",".hhsssssshh.",".hhssrrsshh.","..hh.ss.hh..","..dddddddd..","..dddwwddd..",".dddddddddd.",".dDddddddDd.","dddddddddddd","dddDddddDddd"];
+const PA=mk([...BODY,"...ss..ss...","...rr..rr..."]);
+const PB=mk([...BODY,"..ss....ss..","..rr....rr.."]);
+const ICONS=[
+ ["..pp.pp..",".pPPpPPp.","pPPPPPPPp","pPPPPPPPp",".pPPPPPp.","..pPPPp..","...pPp...","....p...."],
+ ["..yyyyy..",".yyyyyyy.",".yywwwyy.",".yyyyyyy.","..yyyyy..","...aaa...","...aaa...","....a...."],
+ ["..wwwww..",".wwwwwww.","wwwwwwwww","wwwwwwwww",".wwwwwww.",".ppppppp.",".wwwwwww."],
+ [".rrr.rrr.","rrrrrrrrr","RRRRRRRRR",".rrrrrrr.","..rrrrr.."],
+ ["..ppppp..",".puuuuup.","puuwuuuup","puwuuuuup","puuuuuuup",".puuuuup.","..ppppp..","....p....","....p...."],
+ ["....R....","...RRR...","..RRRRR..",".RRRRRRR.","RRRRRRRRR",".wyywbbw.",".wyywbbw.",".wwwwbbw."],
+ ["..uuuuu..",".uPPPPPu.","uPwwPPPPu","uPwPPPPPu","uPPPPPPPu",".uPPPPPu.","..uuuuu.."],
+ ["..yyyyy..",".yyyyyyy.","yykyyykyy","yyyyyyyyy","ykyyyyyky","yykkkkkyy",".yyyyyyy.","..yyyyy.."]
+].map(mk);
+const MUSH=mk([".rrr.","rwrrr","rrrwr","..w..","..w.."]);
+const TH=[mk([".p.p.","ppppp","ppppp",".ppp.","..p.."]),mk([".r.r.","rrrrr","rrrrr",".rrr.","..r.."])];
+const mkTree=v=>{const c=document.createElement('canvas');c.width=22;c.height=32;const g=c.getContext('2d');
+ g.fillStyle='#5c3d2e';g.fillRect(9,26,4,6);
+ for(let i=0;i<5;i++){const w=6+i*3,x=11-(w>>1),y=1+i*5;g.fillStyle=['#2d6a4f','#285f46','#347a59'][v];g.fillRect(x,y,w,7);g.fillStyle='#40916c';g.fillRect(x,y,2,7);g.fillRect(x,y,w,1);g.fillStyle='#14342a';g.fillRect(x,y+6,w,1)}
+ if(v===2)for(let k=0;k<8;k++){g.fillStyle=k%2?'#ff8fab':'#e63946';g.fillRect(4+(k*7)%14,5+(k*5)%18,1,1)}
+ return c};
+const TS=[0,1,2].map(mkTree);
+/* ===== WORLD ===== */
+const WW=720,WH=480,POS=[[130,330],[230,150],[330,370],[410,120],[500,300],[580,100],[640,380],[670,220]];
+const rng=a=>()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+const R=rng(7);
+const ground=document.createElement('canvas');ground.width=WW;ground.height=WH;
+(()=>{const g=ground.getContext('2d');g.fillStyle='#1b4332';g.fillRect(0,0,WW,WH);
+ for(let i=0;i<500;i++){g.fillStyle=R()<.5?'#163a2b':'#2d6a4f';g.fillRect(R()*WW|0,R()*WH|0,R()<.5?1:2,1+(R()*2|0))}
+ for(let i=0;i<70;i++){const x=R()*WW|0,y=R()*WH|0;g.fillStyle=['#ff8fab','#ffc2d1','#e63946'][i%3];g.fillRect(x-1,y,1,1);g.fillRect(x+1,y,1,1);g.fillRect(x,y-1,1,1);g.fillRect(x,y+1,1,1);g.fillStyle='#ffd166';g.fillRect(x,y,1,1)}
+ for(let i=0;i<12;i++)g.drawImage(MUSH,R()*WW|0,R()*WH|0)})();
+const trees=[];
+for(let x=-4;x<WW+20;x+=17){trees.push({x,y:12+R()*4,v:R()*3|0});trees.push({x,y:WH+6+R()*4,v:R()*3|0})}
+for(let y=30;y<WH;y+=17){trees.push({x:-4,y,v:0});trees.push({x:WW+4,y,v:1})}
+const free=(x,y)=>POS.every(p=>Math.hypot(p[0]-x,p[1]-y)>34)&&Math.hypot(x-40,y-240)>40&&trees.every(t=>Math.hypot(t.x-x,t.y-y)>16);
+for(let i=0,n=0;n<110&&i<3000;i++){const x=20+R()*(WW-40),y=40+R()*(WH-60);if(free(x,y)){trees.push({x,y,v:R()*3|0});n++}}
+const items=POS.map((p,i)=>({x:p[0],y:p[1],i,s:ICONS[i]}));
+const FF=Array.from({length:40},()=>({x:R()*WW,y:R()*WH,p:R()*9,c:R()<.5?'#ffc2d1':'#ffd166'}));
+/* ===== STATE ===== */
+const $=id=>document.getElementById(id);
+const cv=$('c'),ctx=cv.getContext('2d');let VW=320,VH=180;
+let state='title',T=0,last=0,openedAt=0,tg=null,down=false;
+const P={x:40,y:240,m:0},SP=62,HS=[],keys={};
+let got=new Set();try{JSON.parse(localStorage.getItem('forestReasons')||'[]').forEach(i=>got.add(i))}catch(e){}
+const save=()=>{try{localStorage.setItem('forestReasons',JSON.stringify([...got]))}catch(e){}};
+function resize(){const a=innerWidth/innerHeight;
+ if(a>=1){VH=180;VW=Math.max(240,Math.min(400,Math.round(180*a)))}else{VW=200;VH=Math.max(180,Math.min(420,Math.round(200/a)))}
+ cv.width=VW;cv.height=VH;ctx.imageSmoothingEnabled=false;
+ const s=Math.min(innerWidth/VW,innerHeight/VH);cv.style.width=VW*s+'px';cv.style.height=VH*s+'px'}
+addEventListener('resize',resize);resize();
+/* ===== AUDIO ===== */
+let AC,master,muted=false,step=0;
+const MEL=[523,0,659,0,784,659,0,587,523,0,587,0,659,587,0,440],BASS=[131,131,110,98];
+function tone(f,t,d,type,v){const o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(g);g.connect(master);o.start(t);o.stop(t+d)}
+function audio(){if(AC){AC.resume();return}
+ try{AC=new(window.AudioContext||window.webkitAudioContext)();master=AC.createGain();master.gain.value=muted?0:.5;master.connect(AC.destination);
+ setInterval(()=>{const t=AC.currentTime,m=MEL[step%16];if(m)tone(m,t,.3,'square',.025);if(step%4===0)tone(BASS[(step>>2)&3],t,.9,'triangle',.07);step++},240)}catch(e){AC=null}}
+const sfx=()=>{if(!AC)return;const t=AC.currentTime;[523,659,784,1046].forEach((f,i)=>tone(f,t+i*.08,.2,'square',.07))};
+$('mute').onclick=()=>{muted=!muted;if(master)master.gain.value=muted?0:.5;$('mute').textContent=muted?'✕':'♪'};
+/* ===== UI ===== */
+$('hud').innerHTML=Array.from({length:8},()=>'<span>♥</span>').join('');
+const hud=()=>[...$('hud').children].forEach((s,i)=>s.style.color=got.has(i)?'#ff8fab':'#2d6a4f');
+function setTitle(){const n=got.size;$('go').textContent=n>=8?'PLAY AGAIN':n>0?'CONTINUE ('+n+'/8)':'START';$('rs').style.display=n>0?'block':'none';$('to').textContent='for '+HER}
+$('go').onclick=()=>{audio();if(got.size>=8){got.clear();save()}hud();HS.length=0;$('title').style.display='none';state='play'};
+$('rs').onclick=()=>{got.clear();save();hud();setTitle()};
+$('again').onclick=()=>{got.clear();save();hud();HS.length=0;P.x=40;P.y=240;tg=null;$('end').style.display='none';state='play'};
+$('fin').innerHTML=HER+', you found all 8. Every one of them is true, and there are a hundred more I haven’t hidden yet.<br><br>I love you.<br>– '+FROM;
+function openDlg(it){state='dialog';openedAt=performance.now();got.add(it.i);save();sfx();hud();tg=null;
+ $('dt').textContent='REASON 0'+(it.i+1);$('ds').textContent='You found '+REASONS[it.i][0]+'!';$('dx').textContent=REASONS[it.i][1];
+ $('dh').textContent=(got.size<8?(8-got.size)+' more hidden in the forest. ':'That was the last one. ')+'Tap to continue';$('dlg').style.display='block'}
+function closeDlg(){if(state!=='dialog'||performance.now()-openedAt<350)return;$('dlg').style.display='none';
+ if(got.size>=8){state='end';$('end').style.display='flex'}else state='play'}
+$('dlg').addEventListener('pointerdown',closeDlg);
+/* ===== INPUT ===== */
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();
+ if(state==='dialog'&&(k===' '||k==='enter'||k==='e')){closeDlg();e.preventDefault();return}
+ keys[k]=1;if(k.startsWith('arrow')||k===' ')e.preventDefault()});
+addEventListener('keyup',e=>delete keys[e.key.toLowerCase()]);
+const setT=e=>{const r=cv.getBoundingClientRect(),cx=cam().x,cy=cam().y;tg={x:(e.clientX-r.left)/r.width*VW+cx,y:(e.clientY-r.top)/r.height*VH+cy}};
+cv.addEventListener('pointerdown',e=>{if(state==='play'){down=true;setT(e)}});
+cv.addEventListener('pointermove',e=>{if(down&&state==='play')setT(e)});
+addEventListener('pointerup',()=>down=false);
+/* ===== GAME ===== */
+const cam=()=>({x:Math.round(Math.max(0,Math.min(WW-VW,P.x-VW/2))),y:Math.round(Math.max(0,Math.min(WH-VH,P.y-VH/2)))});
+const hit=(x,y)=>x<10||x>WW-10||y<26||y>WH-8||trees.some(t=>Math.abs(t.x-x)<6&&Math.abs(t.y-y)<4);
+function upd(dt){
+ let dx=(keys.arrowright||keys.d?1:0)-(keys.arrowleft||keys.a?1:0),dy=(keys.arrowdown||keys.s?1:0)-(keys.arrowup||keys.w?1:0);
+ if(dx||dy)tg=null;else if(tg){const a=tg.x-P.x,b=tg.y-P.y,d=Math.hypot(a,b);if(d<2)tg=null;else{dx=a/d;dy=b/d}}
+ P.m=0;
+ if(dx||dy){const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;const ox=P.x,oy=P.y,nx=P.x+dx*SP*dt,ny=P.y+dy*SP*dt;
+  if(!hit(nx,P.y))P.x=nx;if(!hit(P.x,ny))P.y=ny;P.m=(P.x!==ox||P.y!==oy)?1:0;if(!P.m)tg=null}
+ for(const it of items)if(!got.has(it.i)&&Math.hypot(it.x-P.x,it.y-P.y)<13){openDlg(it);break}}
+const shadow=(x,y,r)=>{ctx.fillStyle='rgba(8,28,21,.5)';ctx.fillRect(x-r,y-1,r*2,2)};
+function drawItem(it,cx,cy){const s=it.s,x=Math.round(it.x-cx),y=Math.round(it.y-cy),f=got.has(it.i),b=f?0:Math.round(Math.sin(T*3+it.i)*2),my=y-s.height/2-5;
+ shadow(x,y,7);
+ if(!f){ctx.globalAlpha=.2+.1*Math.sin(T*4+it.i);ctx.fillStyle='#ff8fab';ctx.beginPath();ctx.arc(x,my,15,0,7);ctx.fill();ctx.globalAlpha=1;
+  for(let k=0;k<3;k++){const a=T*2+k*2.1+it.i;ctx.fillStyle=k%2?'#ffd166':'#fff';ctx.fillRect(Math.round(x+Math.cos(a)*13),Math.round(my+Math.sin(a)*10),1,1)}}
+ ctx.globalAlpha=f?.55:1;ctx.drawImage(s,x-(s.width>>1),y-s.height-5+b);ctx.globalAlpha=1}
+function drawP(cx,cy){const x=Math.round(P.x-cx),y=Math.round(P.y-cy),f=P.m&&((T*8)|0)%2;shadow(x,y,5);ctx.drawImage(f?PB:PA,x-6,y-16-(f?1:0))}
+function render(dt){const {x:cx,y:cy}=cam();ctx.drawImage(ground,-cx,-cy);
+ const L=[];
+ for(const t of trees)if(t.x>cx-12&&t.x<cx+VW+12&&t.y>cy&&t.y-32<cy+VH)L.push([t.y,()=>ctx.drawImage(TS[t.v],Math.round(t.x-11-cx),Math.round(t.y-32-cy))]);
+ items.forEach(it=>L.push([it.y,()=>drawItem(it,cx,cy)]));
+ L.push([P.y,()=>drawP(cx,cy)]);
+ L.sort((a,b)=>a[0]-b[0]);L.forEach(o=>o[1]());
+ for(const f of FF){ctx.globalAlpha=.3+.7*Math.abs(Math.sin(T*1.5+f.p));ctx.fillStyle=f.c;ctx.fillRect((f.x+Math.sin(T*.6+f.p)*14-cx)|0,(f.y+Math.cos(T*.5+f.p)*10-cy)|0,2,2)}
+ ctx.globalAlpha=1;
+ if(state==='end'&&Math.random()<.12)HS.push({x:Math.random()*VW,y:VH+6,s:18+Math.random()*30,r:Math.random()<.5?1:0});
+ for(let i=HS.length-1;i>=0;i--){const h=HS[i];h.y-=h.s*dt;if(h.y<-8)HS.splice(i,1);else ctx.drawImage(TH[h.r],Math.round(h.x),Math.round(h.y))}}
+function frame(now){const dt=Math.min(.05,(now-last)/1000||0);last=now;T+=dt;if(state==='play')upd(dt);render(dt);requestAnimationFrame(frame)}
+hud();setTitle();requestAnimationFrame(frame);
+</script>
+</body>
+</html>
